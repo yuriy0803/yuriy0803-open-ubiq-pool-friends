@@ -3,6 +3,7 @@ module github.com/yuriy0803/open-etc-pool-friends
 go 1.18
 
 require (
+	github.com/btcsuite/btcd v0.20.1-beta // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.2.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/edsrzf/mmap-go v1.0.0 // indirect
@@ -13,6 +14,7 @@ require (
 	github.com/robfig/cron v1.2.0 // indirect
 	github.com/ubiq/go-ubiq/v7 v7.0.1 // indirect
 	github.com/yuriy0803/etchash v0.0.0-20230223191039-6ceba5f17b4d // indirect
+	github.com/yuriy0803/ubqhash v0.0.0-20230528104827-4cedf1fd0ea0 // indirect
 	github.com/yvasiyarov/go-metrics v0.0.0-20150112132944-c25f46c4b940 // indirect
 	github.com/yvasiyarov/gorelic v0.0.7 // indirect
 	github.com/yvasiyarov/newrelic_platform_go v0.0.0-20160601141957-9c099fbc30e9 // indirect

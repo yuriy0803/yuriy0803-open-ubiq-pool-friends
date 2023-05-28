@@ -1,6 +1,7 @@
 package util
 
 import (
+	"encoding/hex"
 	"math/big"
 	"regexp"
 	"strconv"
@@ -17,6 +18,14 @@ var Shannon = math.BigPow(10, 9)
 var pow256 = math.BigPow(2, 256)
 var addressPattern = regexp.MustCompile("^0x[0-9a-fA-F]{40}$")
 var zeroHash = regexp.MustCompile("^0?x?0+$")
+
+var Diff1 = StringToBig("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+
+func StringToBig(h string) *big.Int {
+	n := new(big.Int)
+	n.SetString(h, 0)
+	return n
+}
 
 func IsValidHexAddress(s string) bool {
 	if IsZeroHash(s) || !addressPattern.MatchString(s) {
@@ -35,8 +44,13 @@ func MakeTimestamp() int64 {
 
 func GetTargetHex(diff int64) string {
 	difficulty := big.NewInt(diff)
-	diff1 := new(big.Int).Div(pow256, difficulty)
-	return string(hexutil.Encode(diff1.Bytes()))
+	diff1 := new(big.Int).Div(Diff1, difficulty)
+	targetBytes := diff1.Bytes()
+	if len(targetBytes) < 32 {
+		padding := make([]byte, 32-len(targetBytes))
+		targetBytes = append(padding, targetBytes...)
+	}
+	return "0x" + hex.EncodeToString(targetBytes)
 }
 
 func TargetHexToDiff(targetHex string) *big.Int {
@@ -93,4 +107,29 @@ func DiffIntToFloat(diffInt int64) (diffFloat float64) {
 
 func ToHex1(n int64) string {
 	return strconv.FormatInt(n, 10)
+}
+
+// https://github.com/octanolabs/go-spectrum/blob/21ca5a2f3fec6c4bd12d5cc0a93b40cd305036fc/util/util.go
+func DecodeValueHex(val string) string {
+
+	if len(val) < 2 || val == "0x0" {
+		return "0"
+	}
+
+	if val[:2] == "0x" {
+		x, err := hexutil.DecodeBig(val)
+
+		if err != nil {
+			//		log.Error("errorDecodeValueHex", "str", val, "err", err)
+		}
+		return x.String()
+	} else {
+		x, ok := big.NewInt(0).SetString(val, 16)
+
+		if !ok {
+			//		log.Error("errorDecodeValueHex", "str", val, "ok", ok)
+		}
+
+		return x.String()
+	}
 }
