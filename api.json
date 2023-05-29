@@ -4,7 +4,7 @@
 	"name": "main",
         "pplns": 9000,
 	"network": "ubiq",
-	"coin-name":"ubiq",
+	"coin-name":"ubq",
 
 	"proxy": {
 		"enabled": true,
