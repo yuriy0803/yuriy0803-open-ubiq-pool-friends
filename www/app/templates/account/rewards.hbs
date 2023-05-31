@@ -17,6 +17,7 @@
         <th>Time Found</th>
         <th>Reward</th>
         <th>Round Share</th>
+        <th>Personal Luck</th>
       </tr>
     </thead>
     <tbody>
@@ -32,6 +33,7 @@
                 {{/if}}
 	  </td>
           <td>{{format-number tx.percent style='percent' maximumFractionDigits='2'}}</td>
+          <td>{{format-number tx.personalLuck style='percent' maximumFractionDigits='2'}}</td>
         </tr>
       {{/each}}
     </tbody>
