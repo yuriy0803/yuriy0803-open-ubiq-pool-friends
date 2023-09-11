@@ -4,7 +4,7 @@
 	"name": "main",
         "pplns": 9000,
 	"network": "ubiq",
-	"coin-name":"ubq",
+	"coin-name":"UBQ",
 
 	"proxy": {
 		"enabled": true,
@@ -105,7 +105,7 @@
   
 	"exchange": {
 		   "enabled": true,
-		   "url": "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=ubiq",
+		   "url": "https://api.coinpaprika.com/v1/ticker/ubq-ubiq",
 		   "timeout": "50s",
 		   "refreshInterval": "900s"
     },
