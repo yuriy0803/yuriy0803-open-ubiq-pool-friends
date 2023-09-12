@@ -134,6 +134,23 @@ func (s *ApiServer) Start() {
 				s.collectMinerCharts(login, miner["currentHashrate"].(int64), miner["hashrate"].(int64), miner["workersOnline"].(int64))
 			}
 		})
+
+		c.AddFunc("0 0 */1 * *", func() {
+			// Delete old miner data
+			err := s.backend.DeleteOldMinerData()
+			if err != nil {
+				log.Println("Error deleting old miner data:", err)
+			}
+		})
+
+		c.AddFunc("0 0 */1 * *", func() {
+			// Delete old share data
+			err := s.backend.DeleteOldShareData()
+			if err != nil {
+				log.Println("Error deleting old share data:", err)
+			}
+		})
+
 		///test share chart
 		shareCharts := s.config.ShareCharts
 		log.Printf("Share charts config is :%v", shareCharts)

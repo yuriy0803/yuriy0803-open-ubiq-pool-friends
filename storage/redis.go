@@ -8,9 +8,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
-	"gopkg.in/redis.v3"
+	redis "gopkg.in/redis.v3"
 
 	"github.com/yuriy0803/open-etc-pool-friends/util"
 )
@@ -67,7 +68,7 @@ type SumRewardData struct {
 	Name     string  `json:"name"`
 	Offset   int64   `json:"offset"`
 	Blocks   int64   `json:"blocks"`
-	Effort   float64 `json:"averageLuck"`
+	Effort   float64 `json:"personalLuck"`
 	Count    float64 `json:"_"`
 	ESum     float64 `json:"_"`
 }
@@ -1408,6 +1409,8 @@ func (r *RedisClient) CollectWorkersStats(sWindow, lWindow time.Duration, login 
 		workers[id] = worker
 	}
 
+	var personalEffort float64
+
 	stats["workers"] = workers
 	stats["workersTotal"] = len(workers)
 	stats["workersOnline"] = online
@@ -1420,17 +1423,13 @@ func (r *RedisClient) CollectWorkersStats(sWindow, lWindow time.Duration, login 
 
 	var dorew []*SumRewardData
 	dorew = append(dorew, &SumRewardData{Name: "Last 60 minutes", Interval: 3600, Offset: 0})
-	dorew = append(dorew, &SumRewardData{Name: "Last 3 hours", Interval: 3600 * 3, Offset: 0})
-	dorew = append(dorew, &SumRewardData{Name: "Last 6 hours", Interval: 3600 * 6, Offset: 0})
 	dorew = append(dorew, &SumRewardData{Name: "Last 12 hours", Interval: 3600 * 12, Offset: 0})
 	dorew = append(dorew, &SumRewardData{Name: "Last 24 hours", Interval: 3600 * 24, Offset: 0})
-	dorew = append(dorew, &SumRewardData{Name: "Last 2 days", Interval: 3600 * 24 * 2, Offset: 0})
 	dorew = append(dorew, &SumRewardData{Name: "Last 7 days", Interval: 3600 * 24 * 7, Offset: 0})
-	dorew = append(dorew, &SumRewardData{Name: "Last 14 days", Interval: 3600 * 24 * 14, Offset: 0})
 	dorew = append(dorew, &SumRewardData{Name: "Last 30 days", Interval: 3600 * 24 * 30, Offset: 0})
 
 	for _, reward := range rewards {
-
+		personalEffort = reward.PersonalEffort
 		for _, dore := range dorew {
 			dore.Count += 0
 			dore.ESum += 0
@@ -1440,22 +1439,15 @@ func (r *RedisClient) CollectWorkersStats(sWindow, lWindow time.Duration, login 
 			if reward.Timestamp > now-dore.Interval {
 				dore.Reward += reward.Reward
 				dore.Blocks++
-				dore.ESum += reward.PersonalEffort
+				dore.ESum += personalEffort // Hier wird personalEffort verwendet
 				dore.Count++
 				dore.Effort = dore.ESum / dore.Count
 			}
 		}
 	}
+
 	stats["sumrewards"] = dorew
-	stats["1hreward"] = dorew[0].Reward
-	stats["3hreward"] = dorew[1].Reward
-	stats["6hreward"] = dorew[2].Reward
-	stats["12hreward"] = dorew[3].Reward
-	stats["24hreward"] = dorew[4].Reward
-	stats["2dreward"] = dorew[5].Reward
-	stats["7dreward"] = dorew[6].Reward
-	stats["14dreward"] = dorew[7].Reward
-	stats["30dreward"] = dorew[8].Reward
+	stats["24hreward"] = dorew[2].Reward
 	return stats, nil
 }
 
@@ -1852,12 +1844,17 @@ func (r *RedisClient) getSharesStatus(login string, id string) (int64, int64, in
 
 }
 
-// lets try to fuck without understanding and see if it works
-func (r *RedisClient) WriteWorkerShareStatus(login string, id string, valid bool, stale bool, invalid bool) {
+var deletionLock sync.Mutex
+var deletionDone bool
 
+// WriteWorkerShareStatus updates the worker's share status in Redis.
+// It takes the worker's login, ID, and status flags for valid, stale, and invalid shares.
+func (r *RedisClient) WriteWorkerShareStatus(login string, id string, valid bool, stale bool, invalid bool) {
 	valid_int := 0
 	stale_int := 0
 	invalid_int := 0
+
+	// Convert boolean flags to integer values.
 	if valid {
 		valid_int = 1
 	}
@@ -1868,38 +1865,42 @@ func (r *RedisClient) WriteWorkerShareStatus(login string, id string, valid bool
 		invalid_int = 1
 	}
 
-	// var after = time.Now().AddDate(0, 0, -1).Unix()
-	//  var now = time.Now().Unix()
-	// if(now >= after){
-	//   tx.HDel(r.formatKey("minerShare", login, id))
-	// }
 	t := time.Now().Local()
-	if t.Format("15:04:05") >= "23:59:00" {
-		tx := r.client.Multi()
-		defer tx.Close()
-		tx.Exec(func() error {
-			//tx.Del(r.formatKey("minerShare", login, id))
-			tx.HSet(r.formatKey("minerShare", login, id), "valid", strconv.FormatInt(0, 10))
-			tx.HSet(r.formatKey("minerShare", login, id), "stale", strconv.FormatInt(0, 10))
-			tx.HSet(r.formatKey("minerShare", login, id), "invalid", strconv.FormatInt(0, 10))
-			return nil
-		})
+	formattedTime := t.Format("15:04:05") // Time in 24-hour format
+
+	if formattedTime >= "23:59:00" && !deletionDone {
+		// Lock to ensure only one deletion occurs.
+		deletionLock.Lock()
+		defer deletionLock.Unlock()
+
+		if !deletionDone {
+			tx := r.client.Multi()
+			defer tx.Close()
+
+			// Reset share status to 0 for the next day.
+			tx.Exec(func() error {
+				tx.HSet(r.formatKey("minerShare", login, id), "valid", strconv.FormatInt(0, 10))
+				tx.HSet(r.formatKey("minerShare", login, id), "stale", strconv.FormatInt(0, 10))
+				tx.HSet(r.formatKey("minerShare", login, id), "invalid", strconv.FormatInt(0, 10))
+				return nil
+			})
+
+			deletionDone = true
+		}
 	} else {
-		// So, we need to initiate the tx object
 		tx := r.client.Multi()
 		defer tx.Close()
 
+		// Increment share counts.
 		tx.Exec(func() error {
-			// OK, good, no need to read reset and add if i use Hset and HGet shit
 			tx.HIncrBy(r.formatKey("minerShare", login, id), "valid", int64(valid_int))
 			tx.HIncrBy(r.formatKey("minerShare", login, id), "stale", int64(stale_int))
 			tx.HIncrBy(r.formatKey("minerShare", login, id), "invalid", int64(invalid_int))
 			tx.HIncrBy(r.formatKey("chartsNum", "share", login), "valid", int64(valid_int))
-			tx.HIncrBy(r.formatKey("chartsNum", "share", login), "stale", int64(stale_int)) // Would that work?
-
+			tx.HIncrBy(r.formatKey("chartsNum", "share", login), "stale", int64(stale_int))
 			return nil
 		})
-	} //end else
+	}
 }
 
 func (r *RedisClient) NumberStratumWorker(count int) {

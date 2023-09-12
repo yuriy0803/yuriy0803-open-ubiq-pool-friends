@@ -176,6 +176,22 @@ func (cs *Session) stratumMode() int {
 func (cs *Session) handleTCPMessage(s *ProxyServer, req *StratumReq) error {
 	// Handle RPC/Stratum methods
 	switch req.Method {
+	// claymore -esm 1
+	case "eth_login":
+		// Unmarshal request parameters
+		var params []string
+		err := json.Unmarshal(req.Params, &params)
+		if err != nil {
+			log.Println("Malformed stratum request params from", cs.ip)
+			return err
+		}
+		// Process "eth_login" method and return response
+		reply, errReply := s.handleLoginRPC(cs, params, req.Worker)
+		if errReply != nil {
+			return cs.sendTCPError(req.Id, errReply)
+		}
+		return cs.sendTCPResult(req.Id, reply)
+		// claymore -esm 0
 	case "eth_submitLogin":
 		var params []string
 		if err := json.Unmarshal(req.Params, &params); err != nil || len(params) < 1 {
@@ -198,7 +214,7 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *StratumReq) error {
 			return err
 		}
 
-		if params[1] != "EthereumStratum/1.0.0" {
+		if params[1] != "EthereumStratum/1.0.0" && params[0] != "GodMiner/2.0.0" {
 			log.Println("Unsupported stratum version from", cs.ip)
 			return cs.sendStratumError(req.Id, "unsupported stratum version")
 		}
@@ -392,11 +408,45 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *StratumReq) error {
 		return cs.sendTCPResult(req.Id, &reply)
 
 	case "eth_submitHashrate":
+		var params []string
+		err := json.Unmarshal(req.Params, &params)
+		if err != nil || len(params) < 2 {
+			log.Println("Malformed stratum request params from", cs.ip)
+			return err
+		}
+
+		hashrateStr := params[0]
+		if !strings.HasPrefix(hashrateStr, "0x") {
+			log.Println("Malformed hashrate value in eth_submitHashrate request from", cs.ip)
+			return errors.New("Malformed hashrate value")
+		}
+
+		hashrate, err := strconv.ParseInt(hashrateStr[2:], 16, 64)
+		if err != nil {
+			log.Println("Malformed hashrate value in eth_submitHashrate request from", cs.ip)
+			return err
+		}
+
+		formattedHashrate := formatEthHashrate(hashrate)
+		log.Printf("Hashrate reported by %v@%v (%v): %s", cs.worker, cs.ip, cs.login, formattedHashrate)
 		return cs.sendTCPResult(req.Id, true)
 	default:
 		errReply := s.handleUnknownRPC(cs, req.Method)
 		return cs.sendTCPError(req.Id, errReply)
 	}
+}
+
+func formatEthHashrate(shareDiffCalc int64) string {
+	units := []string{"H/s", "KH/s", "MH/s", "GH/s", "TH/s", "PH/s"}
+	var i int
+	diff := float64(shareDiffCalc)
+
+	for i = 0; i < len(units)-1 && diff >= 1000.0; i++ {
+		diff /= 1000.0
+	}
+
+	formatted := strconv.FormatFloat(diff, 'f', 2, 64)
+	return formatted + " " + units[i]
 }
 
 func (cs *Session) sendTCPResult(id json.RawMessage, result interface{}) error {
@@ -468,7 +518,7 @@ func (cs *Session) pushNewJob(s *ProxyServer, result interface{}) error {
 			},
 
 			Height: util.ToHex1(int64(a.Height)),
-			Algo:   s.config.Network,
+			Algo:   s.config.Algo,
 		}
 		return cs.enc.Encode(&resp)
 	}
@@ -568,7 +618,7 @@ func (cs *Session) sendJob(s *ProxyServer, id json.RawMessage, newjob bool) erro
 		},
 
 		Height: util.ToHex1(int64(t.Height)),
-		Algo:   s.config.Network,
+		Algo:   s.config.Algo,
 	}
 
 	return cs.sendTCPReq(resp)
@@ -639,6 +689,27 @@ func (cs *Session) getNotificationResponse(s *ProxyServer) interface{} {
 	result := make([]interface{}, 2)
 	result[0] = []string{"mining.notify", randomHex(16), "EthereumStratum/1.0.0"}
 	result[1] = cs.Extranonce
+
+	// Additional response data for NiceHash stratum mode
+	if cs.stratumMode() == NiceHash {
+		t := s.currentBlockTemplate()
+		if t != nil {
+			// Construct the response for NiceHash "mining.notify"
+			jobID := randomHex(8)
+			seedHash := t.Seed
+			headerHash := t.Header
+			height := util.ToHex1(int64(t.Height))
+			// TO DO: Clean up the response structure based on actual data in "t"
+
+			result = []interface{}{
+				"mining.notify",
+				jobID,
+				seedHash,
+				headerHash,
+				height,
+			}
+		}
+	}
 
 	return result
 }

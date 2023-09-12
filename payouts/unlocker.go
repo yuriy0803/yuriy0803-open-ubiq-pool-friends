@@ -35,12 +35,11 @@ type UnlockerConfig struct {
 
 const minDepth = 16
 
-// params for ethereumPow
-var constReward = math.MustParseBig256("2000000000000000000") // 2 ETHW block Reward
+// Universal block reward ethash
+const UniversalHardForkHeight = 0
 
-// Donate 1% from pool fees to developers
-const donationFee = 1.0
-const donationAccount = "0xd97e0075Abe7dC9e12805345336340649b8658Df"
+var UniversalBlockReward = math.MustParseBig256("2000000000000000000") // 2.00
+var UniversalUncleReward = math.MustParseBig256("1750000000000000000") // 1.75
 
 // params for etchash
 var homesteadReward = math.MustParseBig256("5000000000000000000")
@@ -54,6 +53,9 @@ var constantinopleBlockReward = big.NewInt(2e+18)
 // params for ubqhash
 var ubiqStartReward = big.NewInt(8e+18)
 
+// params for Octaspace
+var octaspaceStartReward = big.NewInt(650e+16)
+
 // params for expanse
 const byzantiumHardForkHeight = 800000
 
@@ -64,6 +66,10 @@ var byzantiumExpanseReward = math.MustParseBig256("4000000000000000000")
 var big32 = big.NewInt(32)
 var big8 = big.NewInt(8)
 var big2 = big.NewInt(2)
+
+// Donate 1% from pool fees to developers
+const donationFee = 1.0
+const donationAccount = "0xd97e0075Abe7dC9e12805345336340649b8658Df"
 
 type BlockUnlocker struct {
 	config   *UnlockerConfig
@@ -100,6 +106,10 @@ func NewBlockUnlocker(cfg *UnlockerConfig, backend *storage.RedisClient, network
 	} else if network == "callisto" {
 		// nothing needs configuring here, simply proceed.
 	} else if network == "ubiq" {
+		// nothing needs configuring here, simply proceed.
+	} else if network == "octaspace" {
+		// nothing needs configuring here, simply proceed.
+	} else if network == "universal" {
 		// nothing needs configuring here, simply proceed.
 	} else {
 		log.Fatalln("Invalid network set", network)
@@ -313,7 +323,7 @@ func (u *BlockUnlocker) handleBlock(block *rpc.GetBlockReply, candidate *storage
 		reward.Add(reward, rewardForUncles)
 
 	} else if u.config.Network == "ethereumPow" {
-		reward := new(big.Int).Set(constReward)
+		reward = getConstRewardEthereumpow(candidate.Height)
 		// Add reward for including uncles
 		uncleReward := new(big.Int).Div(reward, big32)
 		rewardForUncles := big.NewInt(0).Mul(uncleReward, big.NewInt(int64(len(block.Uncles))))
@@ -321,6 +331,18 @@ func (u *BlockUnlocker) handleBlock(block *rpc.GetBlockReply, candidate *storage
 
 	} else if u.config.Network == "ethereum" || u.config.Network == "ropsten" || u.config.Network == "ethereumFair" {
 		reward = getConstRewardEthereum(candidate.Height, u.config)
+		// Add reward for including uncles
+		uncleReward := new(big.Int).Div(reward, big32)
+		rewardForUncles := big.NewInt(0).Mul(uncleReward, big.NewInt(int64(len(block.Uncles))))
+		reward.Add(reward, rewardForUncles)
+	} else if u.config.Network == "octaspace" {
+		reward = getConstRewardOctaspace(candidate.Height)
+		// Add reward for including uncles
+		uncleReward := new(big.Int).Div(reward, big32)
+		rewardForUncles := big.NewInt(0).Mul(uncleReward, big.NewInt(int64(len(block.Uncles))))
+		reward.Add(reward, rewardForUncles)
+	} else if u.config.Network == "universal" {
+		reward = getConstRewardUniversal(candidate.Height)
 		// Add reward for including uncles
 		uncleReward := new(big.Int).Div(reward, big32)
 		rewardForUncles := big.NewInt(0).Mul(uncleReward, big.NewInt(int64(len(block.Uncles))))
@@ -340,6 +362,23 @@ func (u *BlockUnlocker) handleBlock(block *rpc.GetBlockReply, candidate *storage
 		reward.Add(reward, extraTxReward)
 	}
 
+	// Remove Burnt Fees, post London (Base Fee Per Gas * Gas Used)
+	baseFeePerGas := new(big.Int)
+	bigBaseFeePerGas := util.DecodeValueHex(block.BaseFeePerGas)
+	baseFeePerGas.SetString(bigBaseFeePerGas, 10)
+	log.Println("baseFeePerGas: ", baseFeePerGas)
+	log.Println("block.BaseFeePerGas: ", block.BaseFeePerGas)
+
+	//gasUsed := big.NewInt(int64(block.GasUsed))
+	gasUsed := new(big.Int)
+	bigGasUsed := util.DecodeValueHex(block.GasUsed)
+	gasUsed.SetString(bigGasUsed, 10)
+	log.Println("gasUsed: ", gasUsed)
+
+	burntFees := new(big.Int).Mul(baseFeePerGas, gasUsed)
+	log.Println("BurntFees: ", burntFees)
+	reward.Sub(reward, burntFees)
+
 	candidate.Orphan = false
 	candidate.Hash = block.Hash
 	candidate.Reward = reward
@@ -358,16 +397,21 @@ func handleUncle(height int64, uncle *rpc.GetBlockReply, candidate *storage.Bloc
 	} else if cfg.Network == "ubiq" {
 		reward = getUncleRewardUbiq(new(big.Int).SetInt64(uncleHeight), new(big.Int).SetInt64(height), getConstRewardUbiq(height))
 	} else if cfg.Network == "expanse" {
-		reward = getUncleRewardUbiq(new(big.Int).SetInt64(uncleHeight), new(big.Int).SetInt64(height), getConstRewardExpanse(height))
+		reward = getUncleRewardExpanse(new(big.Int).SetInt64(uncleHeight), new(big.Int).SetInt64(height), getConstRewardExpanse(height))
 	} else if cfg.Network == "etica" {
 		reward = getUncleRewardEthereum(new(big.Int).SetInt64(uncleHeight), new(big.Int).SetInt64(height), getConstRewardetica(height))
 	} else if cfg.Network == "callisto" {
 		reward = getUncleRewardEthereum(new(big.Int).SetInt64(uncleHeight), new(big.Int).SetInt64(height), getConstRewardcallisto(height))
 	} else if cfg.Network == "ethereumPow" {
-		reward = getUncleRewardEthereumPow(uncleHeight, height)
+		reward = getUncleRewardEthereumpow(new(big.Int).SetInt64(uncleHeight), new(big.Int).SetInt64(height), getConstRewardEthereumpow(height))
 	} else if cfg.Network == "ethereum" || cfg.Network == "ropsten" || cfg.Network == "ethereumFair" {
 		reward = getUncleRewardEthereum(new(big.Int).SetInt64(uncleHeight), new(big.Int).SetInt64(height), getConstRewardUbiq(height))
+	} else if cfg.Network == "octaspace" {
+		reward = getUncleRewardOctaspace(new(big.Int).SetInt64(uncleHeight), new(big.Int).SetInt64(height), getConstRewardOctaspace(height))
+	} else if cfg.Network == "universal" {
+		reward = getUncleRewardUniversal(new(big.Int).SetInt64(uncleHeight), new(big.Int).SetInt64(height), getConstRewardUniversal(height))
 	}
+
 	candidate.Height = height
 	candidate.UncleHeight = uncleHeight
 	candidate.Orphan = false
@@ -714,9 +758,15 @@ func getUncleReward(uHeight *big.Int, height *big.Int, era *big.Int, reward *big
 // expanse
 func getConstRewardExpanse(height int64) *big.Int {
 	if height >= byzantiumHardForkHeight {
-		return new(big.Int).Set(homesteadExpanseReward)
+		return new(big.Int).Set(byzantiumExpanseReward)
 	}
-	return new(big.Int).Set(byzantiumExpanseReward)
+	return new(big.Int).Set(homesteadExpanseReward)
+}
+
+func getConstRewardEthereumpow(height int64) *big.Int {
+	// Rewards)
+	// EthereumPow
+	return calcBigNumber(2.0)
 }
 
 // ubqhash
@@ -747,6 +797,53 @@ func getConstRewardUbiq(height int64) *big.Int {
 	}
 
 	return reward
+}
+
+// Octaspace
+func getConstRewardOctaspace(height int64) *big.Int {
+	// Rewards
+	reward := new(big.Int).Set(octaspaceStartReward)
+	headerNumber := big.NewInt(height)
+
+	if headerNumber.Cmp(big.NewInt(400_000)) > 0 {
+		reward = big.NewInt(500e+16)
+		// ArcturusBlock 5.00
+	}
+	if headerNumber.Cmp(big.NewInt(1_000_000)) > 0 {
+		reward = big.NewInt(400e+16)
+		// OldenburgBlock 4.00
+	}
+	if headerNumber.Cmp(big.NewInt(1_500_000)) > 0 {
+		reward = big.NewInt(350e+16)
+		// ZagamiBlock 3.50
+	}
+	if headerNumber.Cmp(big.NewInt(2_000_000)) > 0 {
+		reward = big.NewInt(300e+16)
+		// SpringwaterBlock 3.00
+	}
+	// PolarisBlock
+	if headerNumber.Cmp(big.NewInt(2_500_000)) >= 0 {
+		reward = big.NewInt(280e+16)
+		// PolarisBlock 2.80
+	}
+
+	if headerNumber.Cmp(big.NewInt(3_000_000)) >= 0 {
+		reward = big.NewInt(230e+16)
+		// MahasimBlock 2.30
+	}
+
+	return reward
+}
+
+// Octaspace Uncle rw
+func getUncleRewardOctaspace(uHeight *big.Int, height *big.Int, reward *big.Int) *big.Int {
+	r := new(big.Int)
+	r.Add(uHeight, big8)
+	r.Sub(r, height)
+	r.Mul(r, reward)
+	r.Div(r, big8)
+
+	return r
 }
 
 func calcBigNumber(reward float64) *big.Int {
@@ -837,9 +934,38 @@ func (u *BlockUnlocker) getExtraRewardForTx(block *rpc.GetBlockReply) (*big.Int,
 	return amount, nil
 }
 
-func getUncleRewardEthereumPow(uHeight, height int64) *big.Int {
-	reward := new(big.Int).Set(constReward)
-	reward.Mul(big.NewInt(uHeight+8-height), reward)
-	reward.Div(reward, big.NewInt(8))
-	return reward
+func getUncleRewardEthereumpow(uHeight *big.Int, height *big.Int, reward *big.Int) *big.Int {
+	r := new(big.Int)
+	r.Add(uHeight, big8)
+	r.Sub(r, height)
+	r.Mul(r, reward)
+	r.Div(r, big8)
+
+	return r
+}
+
+//  Universal
+
+func getConstRewardUniversal(height int64) *big.Int {
+	if height >= UniversalHardForkHeight {
+		return new(big.Int).Set(UniversalBlockReward)
+	}
+	return new(big.Int).Set(UniversalBlockReward)
+}
+
+func getUncleRewardUniversal(uHeight *big.Int, height *big.Int, reward *big.Int) *big.Int {
+
+	return new(big.Int).Set(UniversalUncleReward)
+
+}
+
+// expanse Uncle rw
+func getUncleRewardExpanse(uHeight *big.Int, height *big.Int, reward *big.Int) *big.Int {
+	r := new(big.Int)
+	r.Add(uHeight, big8)
+	r.Sub(r, height)
+	r.Mul(r, reward)
+	r.Div(r, big8)
+
+	return r
 }
