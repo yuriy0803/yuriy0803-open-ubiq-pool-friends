@@ -34,16 +34,16 @@ export default Ember.Controller.extend({
 
   ethinr: Ember.computed('stats', {
     get() {
-        return parseFloat(this.get('model.exchangedata.price_inr'));
+      return parseFloat(this.get('model.exchangedata.price_inr'));
     }
   }),
 
- ethusd: Ember.computed('stats', {
+  ethusd: Ember.computed('stats', {
     get() {
-        return parseFloat(this.get('model.exchangedata.current_price'));
+      return parseFloat(this.get('model.exchangedata.current_price'));
     }
   }),
-   
+
   blockTime: Ember.computed('model.nodes', {
     get() {
       var node = this.get('bestNode');
@@ -53,10 +53,10 @@ export default Ember.Controller.extend({
       return config.APP.BlockTime;
     }
   }),
-  
+
   hashrate: Ember.computed('difficulty', {
     get() {
-     var blockTime = this.get('blockTime');
+      var blockTime = this.get('blockTime');
       return this.getWithDefault('difficulty', 0) / blockTime;
     }
   }),
