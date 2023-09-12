@@ -4,7 +4,7 @@
 	"name": "main",
     "pplns": 9000,
 	"network": "ubiq",
-	"coin-name":"ubiq",
+	"coin-name":"UBQ",
 
 
 
@@ -36,7 +36,7 @@
 	"redis": {
 		"endpoint": "127.0.0.1:6379",
 		"poolSize": 10,
-		"database": 0,
+		"database": 1,
 		"password": "",
                 "sentinelEnabled": false,
                 "masterName": "mymaster",
