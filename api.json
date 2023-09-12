@@ -4,7 +4,7 @@
 	"name": "main",
         "pplns": 9000,
 	"network": "ubiq",
-	"coin-name":"ubq",
+	"coin-name":"UBQ",
 
 	"proxy": {
 		"enabled": true,
@@ -16,7 +16,7 @@
 		"stateUpdateInterval": "3s",
 		"difficulty": 8589934592,
 		"hashrateExpiration": "3h",
-
+		"stratumHostname": "example.org",
 		"healthCheck": true,
 		"debug": true,
 		"maxFails": 100,
@@ -92,7 +92,7 @@
 	"redis": {
 		"endpoint": "127.0.0.1:6379",
 		"poolSize": 10,
-		"database": 0,
+		"database": 1,
 		"password": "",
                 "sentinelEnabled": false,
                 "masterName": "mymaster",
@@ -105,7 +105,7 @@
   
 	"exchange": {
 		   "enabled": true,
-		   "url": "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=ubiq",
+		   "url": "https://api.coinpaprika.com/v1/ticker/ubq-ubiq",
 		   "timeout": "50s",
 		   "refreshInterval": "900s"
     },
