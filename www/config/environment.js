@@ -25,18 +25,19 @@ module.exports = function(environment) {
         StratumHost: 'example.net',
         StratumPort: 8008,
   
-        // The ETC network
-        Unit: 'UBIQ',
+      // The ETC network
+      Unit: 'UBIQ',
+      Currency: 'USD',
 
-        // Fee and payout details
-        PoolFee: '1%',
-        PayoutThreshold: '0.5 ETC',
-        BlockReward: 1.5,
-  
-        // For network hashrate (change for your favourite fork)
-        BlockTime: 13.2
-      }
-    };
+      // Fee and payout details
+      PoolFee: '1.0%',
+      PayoutThreshold: '0.50 UBIQ',
+      BlockReward: 1.50,
+
+      // For network hashrate (change for your favourite fork)
+      BlockTime: 13.2
+    }
+  };
   
     if (environment === 'development') {
       /* Override ApiUrl just for development, while you are customizing
