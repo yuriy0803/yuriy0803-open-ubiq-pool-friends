@@ -13,7 +13,6 @@ require (
 )
 
 require (
-	github.com/btcsuite/btcd v0.20.1-beta // indirect
 	github.com/garyburd/redigo v1.6.4 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
 	github.com/yvasiyarov/go-metrics v0.0.0-20150112132944-c25f46c4b940 // indirect
